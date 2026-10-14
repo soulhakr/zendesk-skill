@@ -46,7 +46,18 @@ def _has_value(field: dict) -> bool:
 
 
 def _comment_body(comment: dict) -> str:
-    return (comment.get("plain_body") or comment.get("body") or "").strip()
+    """The comment text as people would read it.
+
+    Zendesk's ``plain_body`` is derived from HTML and still carries entities
+    (``&lt;``, ``&gt;``, ``&amp;``, ``&nbsp;``), which would otherwise show up
+    literally - or double-escaped, in the HTML export. Decode them exactly once
+    here; the renderers then escape the result for their own output format, so
+    decoding never lets markup through. ``body`` is already plain text.
+    """
+    plain = comment.get("plain_body")
+    if plain:
+        return html.unescape(plain).replace("\xa0", " ").strip()
+    return (comment.get("body") or "").strip()
 
 
 def _banner(comments: list[dict], extra: dict) -> str | None:

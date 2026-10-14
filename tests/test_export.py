@@ -309,3 +309,46 @@ async def test_public_only_export_never_overwrites_the_full_export(client):
     assert public["file_path"].endswith("ticket_7_public.html")
     assert "internal only" in open(full["file_path"]).read()          # still the full version
     assert "internal only" not in open(public["file_path"]).read()
+
+
+# ----------------------------------------- entities in Zendesk's plain_body
+
+
+ENTITY_COMMENT = {
+    "id": 9, "author_id": 1, "public": True, "created_at": "2026-01-01T00:00:00Z",
+    "plain_body": "From: Rob &lt;rob@corp.test&gt;\nTo: A &amp; B\nsee Chris.&nbsp; Thanks &amp;lt;x&amp;gt;",
+}
+
+
+def test_plain_body_entities_are_decoded_once():
+    body = export._comment_body(ENTITY_COMMENT)
+    assert body == "From: Rob <rob@corp.test>\nTo: A & B\nsee Chris.  Thanks &lt;x&gt;"   # not decoded twice
+
+
+def test_body_without_plain_body_is_left_alone():
+    assert export._comment_body({"body": "typed &lt; literally"}) == "typed &lt; literally"
+
+
+def test_entities_render_as_characters_in_html_and_markdown():
+    ticket = {"id": 7, "subject": "S"}
+    doc = export.render_html(ticket, [ENTITY_COMMENT])
+    assert "From: Rob &lt;rob@corp.test&gt;" in doc            # escaped once: displays as <rob@corp.test>
+    assert "&amp;lt;" not in doc.split("Thanks")[0]            # ...and not double-escaped
+    assert "To: A &amp; B" in doc
+
+    md = export.render_markdown(ticket, [ENTITY_COMMENT])
+    assert "> From: Rob \\<rob@corp.test>" in md
+    assert "To: A & B" in md and "&nbsp;" not in md
+
+
+def test_decoding_does_not_let_markup_through():
+    evil = {"id": 1, "author_id": 1, "public": True,
+            "plain_body": "&lt;script&gt;alert(1)&lt;/script&gt; &lt;img src=x onerror=alert(1)&gt;"}
+    ticket = {"id": 7, "subject": "S"}
+
+    doc = export.render_html(ticket, [evil])
+    assert "<script" not in doc and "<img" not in doc
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in doc       # visible as text, not executed
+
+    md = export.render_markdown(ticket, [evil])
+    assert not re.search(r"(?<!\\)<", md)
