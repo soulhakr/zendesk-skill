@@ -20,16 +20,25 @@ PUBLIC_ONLY_NOTE = "Public replies only; internal notes are omitted."
 
 
 _NOT_ENCODABLE = re.compile("[\ud800-\udfff]")  # lone surrogates: cannot be written as UTF-8
+# C0 controls except tab/newline (ESC starts terminal escape sequences), DEL, and C1 controls
+_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
-def scrub_unencodable(text: str) -> tuple[str, int]:
-    """Replace characters that cannot be written as UTF-8 with U+FFFD.
+def scrub_text(text: str) -> tuple[str, int, int]:
+    """Make rendered text safe to write, print and read in a terminal.
 
-    Zendesk JSON can carry lone surrogates (e.g. ``\\ud800`` from a truncated emoji);
-    one of them would otherwise make writing or printing the whole export fail.
-    Returns the cleaned text and how many characters were replaced.
+    * line endings are normalised to ``\\n`` (a lone carriage return can overwrite
+      text on a terminal);
+    * characters UTF-8 cannot encode (lone surrogates, e.g. from a truncated emoji in
+      Zendesk JSON) and control characters other than tab/newline (terminal escape
+      sequences, NUL, ...) are replaced with U+FFFD.
+
+    Returns the cleaned text and how many characters of each kind were replaced.
     """
-    return _NOT_ENCODABLE.subn("\ufffd", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text, unencodable = _NOT_ENCODABLE.subn("\ufffd", text)
+    text, control = _CONTROL.subn("\ufffd", text)
+    return text, unencodable, control
 
 
 def normalize_format(fmt: str) -> str:

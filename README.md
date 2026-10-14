@@ -120,7 +120,7 @@ Point Claude Code at `SKILL.md` to give Claude full command documentation and wo
 | `search "status:open priority:urgent"` | Search tickets |
 | `ticket 12345` | Get ticket by ID |
 | `ticket-details 12345` | Ticket + all comments |
-| `export-ticket 12345 --format html` | Whole ticket as a Markdown (`md`) or HTML document. Comment formatting (lists, bold, links, code, tables) is kept, rebuilt safely from `html_body`; `--text-only` gives plain text. Internal notes are included and flagged; `--public-only` omits them. `--stdout` returns the document scanned and wrapped like `query` |
+| `export-ticket 12345 --format html` | Whole ticket as a Markdown (`md`) or HTML document. Comment formatting (lists, bold, links, code, tables) is kept, rebuilt safely from `html_body`; `--text-only` gives plain text. Internal notes are included and flagged; `--public-only` omits them. `--stdout` returns the document scanned and wrapped like `query` and writes no file unless `--output` is also given |
 | `linked-incidents 12345` | Incidents linked to a problem ticket |
 | `attachment --ticket 12345 <url>` | Download an attachment |
 
@@ -296,6 +296,10 @@ Requires [`prompt-security-utils`](https://pypi.org/project/prompt-security-util
 ### Local file permissions
 
 Saved responses, exports and downloaded attachments contain customer data, so they are written owner-only: directories `0700`, files `0600`. The tool refuses to use `/tmp/zd-cli-$UID/` if it is a symlink or owned by another user, and it never changes permissions on anything outside that directory. If a directory cannot be secured the command fails with a `File system error` message; if only a file's mode cannot be tightened, a warning is printed on stderr.
+
+### Exported documents
+
+`export-ticket` output contains customer-controlled text. Raw HTML is neutralised (`<` is escaped in Markdown, everything is escaped in HTML), formatting is rebuilt from an allowlist rather than passed through, and terminal control characters and characters UTF-8 cannot encode are replaced with U+FFFD and counted in the result's `warnings`. Markdown that customers write themselves (emphasis, links) is deliberately left as written, so when you open an export of an untrusted ticket in a Markdown viewer, use one that sanitises links - or export with `--format html`, which escapes all comment text. `--stdout` output is scanned and wrapped like `query` output; raw output is only printed when security is disabled, with warnings on stderr.
 
 ## MCP Server
 
