@@ -559,6 +559,38 @@ def ticket_details_cmd(
     output_json(result)
 
 
+@app.command("export-ticket")
+@zendesk_command
+def export_ticket_cmd(
+    ticket_id: Annotated[str, typer.Argument(help="Ticket ID")],
+    fmt: Annotated[str, typer.Option("--format", "-f", help="Output format: md or html")] = "md",
+    output_path: Annotated[str | None, typer.Option("--output", "-o", help="Output file path")] = None,
+    stdout: Annotated[bool, typer.Option("--stdout", help="Return the document (scanned and wrapped like `query`) instead of a JSON summary")] = False,
+    public_only: Annotated[bool, typer.Option("--public-only", help="Leave out internal notes")] = False,
+) -> None:
+    """Export a whole ticket (details, named custom fields, full conversation) as Markdown or HTML.
+
+    Internal notes are included by default and the document says so; use --public-only
+    for a version that is safe to share with the customer.
+    """
+    result = run_async(
+        operations.export_ticket(ticket_id, fmt, output_path, include_content=stdout, public_only=public_only)
+    )
+    if not stdout:
+        output_json(result)
+        return
+
+    # The export is customer-controlled text headed for an LLM: run it through the
+    # same scan + session-marker wrapping as `query` instead of printing it raw.
+    content = result["content"]
+    if is_security_enabled():
+        start, end = get_session_markers()
+        wrapped = wrap_external_data(content, "zendesk_export", f"export_ticket:{ticket_id}", start, end)
+        output_json({"result": wrapped if wrapped is not None else content})
+    else:
+        print(content, end="")
+
+
 @app.command("linked-incidents")
 @zendesk_command
 def linked_incidents_cmd(
