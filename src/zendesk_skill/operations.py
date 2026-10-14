@@ -265,6 +265,7 @@ async def export_ticket(
     output_path: str | None = None,
     include_content: bool = False,
     public_only: bool = False,
+    text_only: bool = False,
 ) -> dict:
     """Export a whole ticket (metadata, named custom fields, full conversation) to a document.
 
@@ -275,6 +276,8 @@ async def export_ticket(
         include_content: Also return the rendered document in the result
         public_only: Leave out internal notes (otherwise they are included and the
             document carries a warning banner)
+        text_only: Render comment bodies as plain text instead of keeping their
+            formatting (lists, bold, links, code, tables)
 
     Returns:
         Dict with id, format, comment_count, internal_notes, file_path (and content if requested)
@@ -314,6 +317,8 @@ async def export_ticket(
     if public_only:
         comments = [c for c in comments if c.get("public")]
         extra["public_only"] = True
+    if text_only:
+        extra["text_only"] = True
 
     warnings: list[str] = []
     await annotate_people(

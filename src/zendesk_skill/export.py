@@ -11,6 +11,8 @@ import html
 import re
 from typing import Any
 
+from zendesk_skill import richtext
+
 FORMATS = {"md": "markdown", "markdown": "markdown", "html": "html"}
 
 INTERNAL_NOTES_WARNING = "Contains internal notes - do not share with the customer."
@@ -58,6 +60,17 @@ def _comment_body(comment: dict) -> str:
     if plain:
         return html.unescape(plain).replace("\xa0", " ").strip()
     return (comment.get("body") or "").strip()
+
+
+def _rich_body(comment: dict, extra: dict) -> richtext.Node | None:
+    """Parsed formatted body (html_body) for a comment, or None to use plain text.
+
+    None when text-only output was requested, there is no html_body, it is too
+    large, or it holds nothing readable.
+    """
+    if extra.get("text_only"):
+        return None
+    return richtext.parse(comment.get("html_body") or "")
 
 
 def _banner(comments: list[dict], extra: dict) -> str | None:
@@ -218,8 +231,13 @@ def render_markdown(ticket: dict, comments: list[dict], extra: dict | None = Non
         out += [f"### {i}. {md_inline(who)} — {kind}{md_inline(via)}", f"*{md_inline(c.get('created_at'))}*", ""]
         if _recipient_line(c):
             out += [f"*{md_inline(_recipient_line(c))}*", ""]
-        body = _comment_body(c) or "(empty)"
-        out += [f"> {_md_body_line(line)}" if line else ">" for line in body.splitlines()]
+        rich = _rich_body(c, extra)
+        rich_md = richtext.to_markdown(rich) if rich else ""
+        if rich_md:
+            out += [f"> {line}" if line else ">" for line in rich_md.splitlines()]
+        else:
+            body = _comment_body(c) or "(empty)"
+            out += [f"> {_md_body_line(line)}" if line else ">" for line in body.splitlines()]
         out.append("")
         for a in _attachments(c):
             url = _http_url(a.get("content_url"))
@@ -244,6 +262,9 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:.2rem 1rem}dt{font-wei
 .comment.note{background:#fff8e1;border-color:#f0d98c}
 .comment header{padding:.4rem .8rem;border-bottom:1px solid #eee;font-size:.9rem;color:#555}
 .comment .body{padding:.6rem .8rem;white-space:pre-wrap;word-wrap:break-word}
+.comment .body.rich{white-space:normal}.rich p{margin:.5rem 0}.rich blockquote{margin:.5rem 0;padding-left:.8rem;border-left:3px solid #ccc;color:#555}
+.rich pre{background:#f6f6f6;padding:.5rem;overflow-x:auto;white-space:pre}.rich code{background:#f6f6f6;padding:0 .2rem;border-radius:3px}
+.rich table{border-collapse:collapse}.rich td,.rich th{border:1px solid #ddd;padding:.2rem .5rem}.rich hr{border:0;border-top:1px solid #ddd}
 .comment ul{margin:0;padding:.3rem 1.8rem .6rem}.tag{display:inline-block;background:#eef;border-radius:3px;padding:0 .4rem;margin-right:.3rem;font-size:.85rem}
 """.strip()
 
@@ -302,10 +323,15 @@ def render_html(ticket: dict, comments: list[dict], extra: dict | None = None) -
         cls = "comment" if c.get("public") else "comment note"
         recipients = _recipient_line(c)
         recipients_html = f"<header>{_e(recipients)}</header>" if recipients else ""
+        rich = _rich_body(c, extra)
+        rich_html = richtext.to_html(rich) if rich else ""
+        body_html = (
+            f'<div class="body rich">{rich_html}</div>' if rich_html
+            else f'<div class="body">{_e(_comment_body(c) or "(empty)")}</div>'
+        )
         out.append(
             f'<div class="{cls}"><header>{i}. <strong>{_e(who)}</strong> — {_e(kind)}{_e(via)}'
-            f" · {_e(c.get('created_at'))}</header>{recipients_html}"
-            f'<div class="body">{_e(_comment_body(c) or "(empty)")}</div>'
+            f" · {_e(c.get('created_at'))}</header>{recipients_html}{body_html}"
         )
         atts = _attachments(c)
         if atts:

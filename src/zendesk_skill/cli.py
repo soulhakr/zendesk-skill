@@ -567,6 +567,7 @@ def export_ticket_cmd(
     output_path: Annotated[str | None, typer.Option("--output", "-o", help="Output file path")] = None,
     stdout: Annotated[bool, typer.Option("--stdout", help="Return the document (scanned and wrapped like `query`) instead of a JSON summary")] = False,
     public_only: Annotated[bool, typer.Option("--public-only", help="Leave out internal notes")] = False,
+    text_only: Annotated[bool, typer.Option("--text-only", help="Plain-text comment bodies (drop lists, bold, links, code, tables)")] = False,
 ) -> None:
     """Export a whole ticket (details, named custom fields, full conversation) as Markdown or HTML.
 
@@ -574,7 +575,9 @@ def export_ticket_cmd(
     for a version that is safe to share with the customer.
     """
     result = run_async(
-        operations.export_ticket(ticket_id, fmt, output_path, include_content=stdout, public_only=public_only)
+        operations.export_ticket(
+            ticket_id, fmt, output_path, include_content=stdout, public_only=public_only, text_only=text_only
+        )
     )
     if not stdout:
         output_json(result)
