@@ -27,7 +27,7 @@ from zendesk_skill.enrich import (
     users_from_sideload,
     with_warnings,
 )
-from zendesk_skill.export import normalize_format, render_html, render_markdown
+from zendesk_skill.export import normalize_format, render_html, render_markdown, scrub_unencodable
 from zendesk_skill.formatting import format_for_zendesk
 from zendesk_skill.queries import get_queries_for_tool
 from zendesk_skill.storage import _get_storage_dir, save_response, write_private_text
@@ -328,6 +328,11 @@ async def export_ticket(
     await annotate_custom_fields(client, [ticket], warnings)
 
     content = (render_html if kind == "html" else render_markdown)(ticket, comments, extra)
+    content, replaced = scrub_unencodable(content)
+    if replaced:
+        warnings.append(
+            f"{replaced} character(s) that cannot be encoded as UTF-8 were replaced with U+FFFD in the export"
+        )
 
     if output_path:
         path = Path(output_path).expanduser()

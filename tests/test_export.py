@@ -352,3 +352,55 @@ def test_decoding_does_not_let_markup_through():
 
     md = export.render_markdown(ticket, [evil])
     assert not re.search(r"(?<!\\)<", md)
+
+
+# ------------------------------------------------- characters UTF-8 cannot encode
+
+
+BAD = json.loads('"bad \\ud800 char \\udfff end"')   # lone surrogates, as Zendesk JSON can carry
+
+
+def test_scrub_replaces_only_unencodable_characters():
+    assert export.scrub_unencodable("ok é 日本 😀 \n\t") == ("ok é 日本 😀 \n\t", 0)   # valid text untouched
+    assert export.scrub_unencodable(BAD) == ("bad \ufffd char \ufffd end", 2)
+    export.scrub_unencodable(BAD)[0].encode("utf-8")                                   # now encodable
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["md", "html"])
+async def test_export_survives_unencodable_characters_and_says_so(monkeypatch, tmp_path, fmt):
+    c = FakeClient(comments=[dict(PUBLIC, plain_body=BAD, html_body=None)])
+    monkeypatch.setattr(operations, "_get_client", lambda: c)
+
+    out = tmp_path / f"t.{fmt}"
+    result = await operations.export_ticket("7", fmt, str(out), include_content=True)
+
+    text = out.read_text(encoding="utf-8")            # strict decode: the file is valid UTF-8
+    assert "bad \ufffd char \ufffd end" in text
+    assert result["content"] == text
+    assert any("2 character(s)" in w and "U+FFFD" in w for w in result["warnings"])
+    result["content"].encode("utf-8")                  # printing --stdout raw cannot fail either
+
+
+@pytest.mark.asyncio
+async def test_unencodable_characters_in_names_and_subjects_are_scrubbed_too(monkeypatch, tmp_path):
+    c = FakeClient()
+    original = c.get
+
+    async def get(endpoint, params=None, timeout=None):
+        result = await original(endpoint, params, timeout)
+        if endpoint == "tickets/7.json":
+            result["ticket"]["subject"] = BAD
+        return result
+
+    c.get = get
+    monkeypatch.setattr(operations, "_get_client", lambda: c)
+    out = tmp_path / "t.md"
+    await operations.export_ticket("7", "md", str(out))
+    assert "\ufffd" in out.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_no_warning_when_everything_encodes(client, tmp_path):
+    result = await operations.export_ticket("7", "md", str(tmp_path / "t.md"))
+    assert not any("U+FFFD" in w for w in result.get("warnings", []))

@@ -19,6 +19,19 @@ INTERNAL_NOTES_WARNING = "Contains internal notes - do not share with the custom
 PUBLIC_ONLY_NOTE = "Public replies only; internal notes are omitted."
 
 
+_NOT_ENCODABLE = re.compile("[\ud800-\udfff]")  # lone surrogates: cannot be written as UTF-8
+
+
+def scrub_unencodable(text: str) -> tuple[str, int]:
+    """Replace characters that cannot be written as UTF-8 with U+FFFD.
+
+    Zendesk JSON can carry lone surrogates (e.g. ``\\ud800`` from a truncated emoji);
+    one of them would otherwise make writing or printing the whole export fail.
+    Returns the cleaned text and how many characters were replaced.
+    """
+    return _NOT_ENCODABLE.subn("\ufffd", text)
+
+
 def normalize_format(fmt: str) -> str:
     """Map a user-supplied format name to 'markdown' or 'html'."""
     try:
