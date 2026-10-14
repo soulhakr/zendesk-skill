@@ -264,3 +264,37 @@ def test_public_only_flag_reaches_the_operation(monkeypatch):
     monkeypatch.setattr(operations, "export_ticket", fake_export)
     CliRunner().invoke(cli.app, ["export-ticket", "7", "--public-only"])
     assert seen["public_only"] is True
+
+
+# ------------------------------------------- recipient shapes seen on a real account
+
+
+def test_original_recipients_are_reported_beyond_sender_and_to():
+    comment = {"via": {"channel": "email", "source": {
+        "from": {"address": "Alice@Example.com", "name": "Alice",
+                 "original_recipients": ["alice@example.com", "support@x.zendesk.com",
+                                         "colleague1@corp.test", "colleague2@corp.test", "colleague1@corp.test"]},
+        "to": {"address": "support@x.zendesk.com", "name": "Support"}}}}
+
+    assert export.email_recipients(comment) == {
+        "From": ["Alice <Alice@Example.com>"],
+        "To": ["Support <support@x.zendesk.com>"],
+        "Also sent to": ["colleague1@corp.test", "colleague2@corp.test"],   # de-duplicated, sender/To removed
+    }
+
+
+def test_explicit_email_ccs_are_not_repeated_as_also_sent_to():
+    comment = {"via": {"source": {
+        "from": {"address": "a@x.test", "original_recipients": ["a@x.test", "b@x.test", "c@x.test"]},
+        "to": {"address": "b@x.test", "email_ccs": ["C@x.test"]}}}}
+    r = export.email_recipients(comment)
+    assert r["CC"] == ["C@x.test"] and "Also sent to" not in r
+
+
+@pytest.mark.parametrize("via", [
+    {}, {"channel": "web"}, {"source": {"from": {}, "to": {}}},
+    {"source": {"from": {"original_recipients": "not-a-list"}, "to": None}},
+    {"source": {"from": {"original_recipients": [None, 5, "ok@x.test"]}, "to": {"address": "t@x.test"}}},
+])
+def test_recipient_parsing_never_crashes_on_odd_shapes(via):
+    assert isinstance(export.email_recipients({"via": via}), dict)

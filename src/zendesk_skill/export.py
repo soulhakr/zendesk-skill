@@ -79,14 +79,34 @@ def _addresses(side: Any) -> list[str]:
 
 
 def email_recipients(comment: dict) -> dict[str, list[str]]:
-    """From/To/CC addresses recorded on an email comment (empty for other channels)."""
+    """From/To/CC and other recipient addresses recorded on an email comment.
+
+    Zendesk records who an email went to in via.source: ``from.original_recipients``
+    lists every address on the message (sender and To included), and some accounts
+    also set ``to.email_ccs``. Anyone beyond the sender and the To address is
+    reported as "Also sent to" (CCs are listed separately when explicitly marked).
+    Empty for non-email channels.
+    """
     source = (comment.get("via") or {}).get("source") or {}
-    to = source.get("to")
-    ccs = to.get("email_ccs") if isinstance(to, dict) else None
+    frm, to = source.get("from"), source.get("to")
+    ccs = [str(c) for c in (to.get("email_ccs") if isinstance(to, dict) else None) or []]
+
+    originals = frm.get("original_recipients") if isinstance(frm, dict) else None
+    named = {
+        str(a).lower()
+        for side in (frm, to) if isinstance(side, dict)
+        for a in [side.get("address")] if a
+    } | {c.lower() for c in ccs}
+    others: list[str] = []
+    for addr in originals if isinstance(originals, list) else []:
+        if isinstance(addr, str) and addr.lower() not in named and addr not in others:
+            others.append(addr)
+
     result = {
-        "From": _addresses(source.get("from")),
+        "From": _addresses(frm),
         "To": _addresses(to),
-        "CC": [str(c) for c in ccs or []],
+        "CC": ccs,
+        "Also sent to": others,
     }
     return {k: v for k, v in result.items() if v}
 
