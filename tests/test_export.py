@@ -298,3 +298,14 @@ def test_explicit_email_ccs_are_not_repeated_as_also_sent_to():
 ])
 def test_recipient_parsing_never_crashes_on_odd_shapes(via):
     assert isinstance(export.email_recipients({"via": via}), dict)
+
+
+@pytest.mark.asyncio
+async def test_public_only_export_never_overwrites_the_full_export(client):
+    full = await operations.export_ticket("7", "html")
+    public = await operations.export_ticket("7", "html", public_only=True)
+
+    assert full["file_path"] != public["file_path"]
+    assert public["file_path"].endswith("ticket_7_public.html")
+    assert "internal only" in open(full["file_path"]).read()          # still the full version
+    assert "internal only" not in open(public["file_path"]).read()

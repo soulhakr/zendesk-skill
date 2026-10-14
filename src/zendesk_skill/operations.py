@@ -328,7 +328,10 @@ async def export_ticket(
         path = Path(output_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        path = _get_storage_dir(ticket_id) / f"ticket_{ticket_id}.{'html' if kind == 'html' else 'md'}"
+        # A public-only export gets its own name so it can never overwrite (or be
+        # mistaken for) the full export that includes internal notes.
+        suffix = "_public" if public_only else ""
+        path = _get_storage_dir(ticket_id) / f"ticket_{ticket_id}{suffix}.{'html' if kind == 'html' else 'md'}"
     write_private_text(path, content)  # customer data: owner-only (0600)
 
     out = {
