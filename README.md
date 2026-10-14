@@ -120,7 +120,7 @@ Point Claude Code at `SKILL.md` to give Claude full command documentation and wo
 | `search "status:open priority:urgent"` | Search tickets |
 | `ticket 12345` | Get ticket by ID |
 | `ticket-details 12345` | Ticket + all comments |
-| `export-ticket 12345 --format html` | Whole ticket as a Markdown (`md`) or HTML document. Internal notes are included and flagged; `--public-only` omits them. `--stdout` returns the document scanned and wrapped like `query` |
+| `export-ticket 12345 --format html` | Whole ticket as a Markdown (`md`) or HTML document. Comment formatting (lists, bold, links, code, tables) is kept, rebuilt safely from `html_body`; `--text-only` gives plain text. Internal notes are included and flagged; `--public-only` omits them. `--stdout` returns the document scanned and wrapped like `query` |
 | `linked-incidents 12345` | Incidents linked to a problem ticket |
 | `attachment --ticket 12345 <url>` | Download an attachment |
 
